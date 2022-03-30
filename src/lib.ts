@@ -10,8 +10,9 @@ import {
     getCodeId,
     MsgInstantiateContract,
     getContractAddress,
+    CreateTxOptions,
 } from "@terra-money/terra.js";
-import { sleep } from "./utils";
+import { sleep as delay } from "./utils";
 
 interface ChainInfo {
     lcd: string;
@@ -40,8 +41,35 @@ async function confirmTx(lcd: LCDClient, txHash: string) {
         } catch(_err: any) {
         }
         
-        await sleep(1000);
+        console.log("  ...confirm retrying");
+        await delay(1000);
     }
+}
+
+let sequence: number = 0;
+let accountNumber: number = 0;
+
+const executeTx = async (lcd: LCDClient, wallet: Wallet, options: CreateTxOptions) => {
+    if (!sequence) {
+        sequence = await wallet.sequence();
+    }
+    if (!accountNumber) {
+        accountNumber = await wallet.accountNumber();
+    }
+
+    const tx = await wallet.createAndSignTx({
+        ...options,
+        sequence,
+        accountNumber,
+    });
+
+    const result = await lcd.tx.broadcastSync(tx);
+    if (result.raw_log === "[]") {
+        console.log(result);
+        ++sequence;
+        await delay(100);
+    }
+    return result;
 }
 
 
@@ -58,11 +86,12 @@ export async function execute<T extends object>(
         message,
     );
     
-    const executeTx = await wallet.createAndSignTx({
-        msgs: [execute],
-    });
+    // const executeTx = await wallet.createAndSignTx({
+    //     msgs: [execute],
+    // });
 
-    const executeTxResult = await lcd.tx.broadcastSync(executeTx);
+    // const executeTxResult = await lcd.tx.broadcastSync(executeTx);
+    const executeTxResult = await executeTx(lcd, wallet, { msgs: [execute] });
     if (isTxError(executeTxResult)) {
         throw new Error(
             `execute transfer failed. code: ${executeTxResult.code}, codespace: ${executeTxResult.codespace}, raw_log: ${executeTxResult.raw_log}`
@@ -74,8 +103,6 @@ export async function execute<T extends object>(
     if (logging) {
         console.log(events);
     }
-
-    await sleep(2000);
     return events;
 }
 
@@ -88,10 +115,11 @@ export async function uploadContract(lcd: LCDClient, wallet: Wallet, filePath: s
         fs.readFileSync(filePath).toString('base64')
     );
 
-    const storeCodeTx = await wallet.createAndSignTx({
-        msgs: [storeCode]
-    });
-    const storeCodeTxResult = await lcd.tx.broadcastSync(storeCodeTx);
+    // const storeCodeTx = await wallet.createAndSignTx({
+    //     msgs: [storeCode]
+    // });
+    // const storeCodeTxResult = await lcd.tx.broadcastSync(storeCodeTx);
+    const storeCodeTxResult = await executeTx(lcd, wallet, { msgs: [storeCode] });
     if (isTxError(storeCodeTxResult)) {
         throw new Error(
             `store code failed. code: ${storeCodeTxResult.code}, codespace: ${storeCodeTxResult.codespace}, raw_log: ${storeCodeTxResult.raw_log}`
@@ -107,7 +135,6 @@ export async function uploadContract(lcd: LCDClient, wallet: Wallet, filePath: s
 
     const codeId = getCodeId(txInfo);
     console.log(`uploading complete, codeId is ${codeId}`);
-    await sleep(2000);
     return codeId;
 }
 
@@ -123,10 +150,10 @@ export async function instantiate<T extends object>(lcd: LCDClient, wallet: Wall
         { uluna: 10000000 },
     );
 
-    const instantiateTx = await wallet.createAndSignTx({
-        msgs: [instantiate],
-    });
-    const instantiateTxResult = await lcd.tx.broadcastSync(instantiateTx);
+    const instantiateTxResult = await executeTx(lcd, wallet, { msgs: [instantiate] });
+
+    // const instantiateTx = await wallet.createAndSignTx(
+    // const instantiateTxResult = await lcd.tx.broadcastSync(instantiateTx);
     if (isTxError(instantiateTxResult)) {
         throw new Error(
             `instantiate failed. code: ${instantiateTxResult.code}, codespace: ${instantiateTxResult.codespace}, raw_log: ${instantiateTxResult.raw_log}`
@@ -141,6 +168,5 @@ export async function instantiate<T extends object>(lcd: LCDClient, wallet: Wall
 
     const contractAddress = getContractAddress(txInfo);
     console.log(`instantiating complete, contract address is ${contractAddress}`);
-    await sleep(2000);
     return contractAddress;
 }
