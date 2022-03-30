@@ -41,7 +41,6 @@ async function confirmTx(lcd: LCDClient, txHash: string) {
         } catch(_err: any) {
         }
         
-        console.log("  ...confirm retrying");
         await delay(1000);
     }
 }
@@ -65,7 +64,6 @@ const executeTx = async (lcd: LCDClient, wallet: Wallet, options: CreateTxOption
 
     const result = await lcd.tx.broadcastSync(tx);
     if (result.raw_log === "[]") {
-        console.log(result);
         ++sequence;
         await delay(100);
     }
